@@ -1,4 +1,3 @@
-
 import io
 import logging
 from copy import deepcopy
@@ -7,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import numpy as np
+import pandas as pd
 import rapidjson
 import tabulate
 from colorama import Fore, Style
@@ -63,10 +63,11 @@ class HyperoptTools():
             'export_time': datetime.now(timezone.utc),
         }
         logger.info(f"Dumping parameters to {filename}")
-        rapidjson.dump(final_params, filename.open('w'), indent=2,
-                       default=hyperopt_serializer,
-                       number_mode=rapidjson.NM_NATIVE | rapidjson.NM_NAN
-                       )
+        with filename.open('w') as f:
+            rapidjson.dump(final_params, f, indent=2,
+                           default=hyperopt_serializer,
+                           number_mode=rapidjson.NM_NATIVE | rapidjson.NM_NAN
+                           )
 
     @staticmethod
     def try_export_params(config: Dict[str, Any], strategy_name: str, params: Dict):
@@ -283,10 +284,10 @@ class HyperoptTools():
         return (f"{results_metrics['total_trades']:6d} trades. "
                 f"{results_metrics['wins']}/{results_metrics['draws']}"
                 f"/{results_metrics['losses']} Wins/Draws/Losses. "
-                f"Avg profit {results_metrics['profit_mean'] * 100: 6.2f}%. "
-                f"Median profit {results_metrics['profit_median'] * 100: 6.2f}%. "
-                f"Total profit {results_metrics['profit_total_abs']: 11.8f} {stake_currency} "
-                f"({results_metrics['profit_total'] * 100: 7.2f}%). "
+                f"Avg profit {results_metrics['profit_mean']:7.2%}. "
+                f"Median profit {results_metrics['profit_median']:7.2%}. "
+                f"Total profit {results_metrics['profit_total_abs']:11.8f} {stake_currency} "
+                f"({results_metrics['profit_total']:8.2%}). "
                 f"Avg duration {results_metrics['holding_avg']} min."
                 )
 
@@ -298,8 +299,8 @@ class HyperoptTools():
                 f"Objective: {results['loss']:.5f}")
 
     @staticmethod
-    def prepare_trials_columns(trials, legacy_mode: bool, has_drawdown: bool) -> str:
-
+    def prepare_trials_columns(trials: pd.DataFrame, legacy_mode: bool,
+                               has_drawdown: bool) -> pd.DataFrame:
         trials['Best'] = ''
 
         if 'results_metrics.winsdrawslosses' not in trials.columns:
@@ -435,8 +436,7 @@ class HyperoptTools():
         return table
 
     @staticmethod
-    def export_csv_file(config: dict, results: list, total_epochs: int, highlight_best: bool,
-                        csv_file: str) -> None:
+    def export_csv_file(config: dict, results: list, csv_file: str) -> None:
         """
         Log result to csv-file
         """

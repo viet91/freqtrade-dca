@@ -60,7 +60,7 @@ OS Specific steps are listed first, the [Common](#common) section below is neces
     sudo apt-get update
 
     # install packages
-    sudo apt install -y python3-pip python3-venv python3-dev python3-pandas git
+    sudo apt install -y python3-pip python3-venv python3-dev python3-pandas git curl
     ```
 
 === "RaspberryPi/Raspbian"
@@ -71,7 +71,7 @@ OS Specific steps are listed first, the [Common](#common) section below is neces
 
 
     ```bash
-    sudo apt-get install python3-venv libatlas-base-dev cmake
+    sudo apt-get install python3-venv libatlas-base-dev cmake curl
     # Use pywheels.org to speed up installation
     sudo echo "[global]\nextra-index-url=https://www.piwheels.org/simple" > tee /etc/pip.conf
 
@@ -112,6 +112,13 @@ git checkout develop
 (1) This command switches the cloned repository to the use of the `stable` branch. It's not needed, if you wish to stay on the (2) `develop` branch.
 
 You may later switch between branches at any time with the `git checkout stable`/`git checkout develop` commands.
+
+??? Note "Install from pypi"
+    An alternative way to install Freqtrade is from [pypi](https://pypi.org/project/freqtrade/). The downside is that this method requires ta-lib to be correctly installed beforehand, and is therefore currently not the recommended way to install Freqtrade.
+
+    ``` bash
+    pip install freqtrade
+    ```
 
 ------
 

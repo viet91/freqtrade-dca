@@ -16,8 +16,6 @@ API_FETCH_ORDER_RETRY_COUNT = 5
 
 BAD_EXCHANGES = {
     "bitmex": "Various reasons.",
-    "bitstamp": "Does not provide history. "
-                "Details in https://github.com/freqtrade/freqtrade/issues/1983",
     "phemex": "Does not provide history. ",
     "poloniex": "Does not provide fetch_order endpoint to fetch both open and closed orders.",
 }
@@ -51,11 +49,25 @@ EXCHANGE_HAS_OPTIONAL = [
 ]
 
 
+def remove_credentials(config) -> None:
+    """
+    Removes exchange keys from the configuration and specifies dry-run
+    Used for backtesting / hyperopt / edge and utils.
+    Modifies the input dict!
+    """
+    if config.get('dry_run', False):
+        config['exchange']['key'] = ''
+        config['exchange']['secret'] = ''
+        config['exchange']['password'] = ''
+        config['exchange']['uid'] = ''
+
+
 def calculate_backoff(retrycount, max_retries):
     """
     Calculate backoff
     """
     return (max_retries - retrycount) ** 2 + 1
+
 
 def retrier_async(f):
     async def wrapper(*args, **kwargs):
@@ -70,8 +82,11 @@ def retrier_async(f):
                 kwargs.update({'count': count})
                 if isinstance(ex, DDosProtection):
                     if "kucoin" in str(ex) and "429000" in str(ex):
-                        logger.warning(f"Kucoin 429 error, keeping count the same.")
-                        count += 1
+                        # Temporary fix for 429000 error on kucoin
+                        # see https://github.com/freqtrade/freqtrade/issues/5700 for details.
+                        logger.warning(
+                            f"Kucoin 429 error, avoid triggering DDosProtection backoff delay. "
+                            f"{count} tries left before giving up")
                     else:
                         backoff_delay = calculate_backoff(count + 1, API_RETRY_COUNT)
                         logger.info(f"Applying DDosProtection backoff delay: {backoff_delay}")
@@ -81,27 +96,6 @@ def retrier_async(f):
                 logger.warning('Giving up retrying: %s()', f.__name__)
                 raise ex
     return wrapper
-    
-# def retrier_async(f):
-#     async def wrapper(*args, **kwargs):
-#         count = kwargs.pop('count', API_RETRY_COUNT)
-#         try:
-#             return await f(*args, **kwargs)
-#         except TemporaryError as ex:
-#             logger.warning('%s() returned exception: "%s"', f.__name__, ex)
-#             if count > 0:
-#                 logger.warning('retrying %s() still for %s times', f.__name__, count)
-#                 count -= 1
-#                 kwargs.update({'count': count})
-#                 if isinstance(ex, DDosProtection):
-#                     backoff_delay = calculate_backoff(count + 1, API_RETRY_COUNT)
-#                     logger.info(f"Applying DDosProtection backoff delay: {backoff_delay}")
-#                     await asyncio.sleep(backoff_delay)
-#                 return await wrapper(*args, **kwargs)
-#             else:
-#                 logger.warning('Giving up retrying: %s()', f.__name__)
-#                 raise ex
-#     return wrapper
 
 
 def retrier(_func=None, retries=API_RETRY_COUNT):

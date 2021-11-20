@@ -143,6 +143,52 @@ def custom_sell(self, pair: str, trade: Trade, current_time: datetime, current_r
 !!! Note
     `buy_tag` is limited to 100 characters, remaining data will be truncated.
 
+## Exit tag
+
+Similar to [Buy Tagging](#buy-tag), you can also specify a sell tag.
+
+``` python
+def populate_sell_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+    dataframe.loc[
+        (
+            (dataframe['rsi'] > 70) &
+            (dataframe['volume'] > 0)
+        ),
+        ['sell', 'exit_tag']] = (1, 'exit_rsi')
+
+    return dataframe
+```
+
+The provided exit-tag is then used as sell-reason - and shown as such in backtest results.
+
+!!! Note
+    `sell_reason` is limited to 100 characters, remaining data will be truncated.
+
+## Bot loop start callback
+
+A simple callback which is called once at the start of every bot throttling iteration.
+This can be used to perform calculations which are pair independent (apply to all pairs), loading of external data, etc.
+
+``` python
+import requests
+
+class AwesomeStrategy(IStrategy):
+
+    # ... populate_* methods
+
+    def bot_loop_start(self, **kwargs) -> None:
+        """
+        Called at the start of the bot iteration (one loop).
+        Might be used to perform pair-independent tasks
+        (e.g. gather some remote resource for comparison)
+        :param **kwargs: Ensure to keep this here so updates to this won't break your strategy.
+        """
+        if self.config['runmode'].value in ('live', 'dry_run'):
+            # Assign this to the class by using self.*
+            # can then be used by populate_* methods
+            self.remote_data = requests.get('https://some_remote_source.example.com')
+
+```
 
 ## Custom stoploss
 
@@ -288,6 +334,12 @@ Stoploss values returned from `custom_stoploss()` always specify a percentage re
 
 The helper function [`stoploss_from_open()`](strategy-customization.md#stoploss_from_open) can be used to convert from an open price relative stop, to a current price relative stop which can be returned from `custom_stoploss()`.
 
+### Calculating stoploss percentage from absolute price
+
+Stoploss values returned from `custom_stoploss()` always specify a percentage relative to `current_rate`. In order to set a stoploss at specified absolute price level, we need to use `stop_rate` to calculate what percentage relative to the `current_rate` will give you the same result as if the percentage was specified from the open price.
+
+The helper function [`stoploss_from_absolute()`](strategy-customization.md#stoploss_from_absolute) can be used to convert from an absolute price, to a current price relative stop which can be returned from `custom_stoploss()`.
+
 #### Stepped stoploss
 
 Instead of continuously trailing behind the current price, this example sets fixed stoploss price levels based on the current profit.
@@ -430,7 +482,7 @@ class AwesomeStrategy(IStrategy):
 
     # ... populate_* methods
 
-    # Set unfilledtimeout to 25 hours, since our maximum timeout from below is 24 hours.
+    # Set unfilledtimeout to 25 hours, since the maximum timeout from below is 24 hours.
     unfilledtimeout = {
         'buy': 60 * 25,
         'sell': 60 * 25
@@ -469,7 +521,7 @@ class AwesomeStrategy(IStrategy):
 
     # ... populate_* methods
 
-    # Set unfilledtimeout to 25 hours, since our maximum timeout from below is 24 hours.
+    # Set unfilledtimeout to 25 hours, since the maximum timeout from below is 24 hours.
     unfilledtimeout = {
         'buy': 60 * 25,
         'sell': 60 * 25
@@ -494,32 +546,6 @@ class AwesomeStrategy(IStrategy):
 ```
 
 ---
-
-## Bot loop start callback
-
-A simple callback which is called once at the start of every bot throttling iteration.
-This can be used to perform calculations which are pair independent (apply to all pairs), loading of external data, etc.
-
-``` python
-import requests
-
-class AwesomeStrategy(IStrategy):
-
-    # ... populate_* methods
-
-    def bot_loop_start(self, **kwargs) -> None:
-        """
-        Called at the start of the bot iteration (one loop).
-        Might be used to perform pair-independent tasks
-        (e.g. gather some remote resource for comparison)
-        :param **kwargs: Ensure to keep this here so updates to this won't break your strategy.
-        """
-        if self.config['runmode'].value in ('live', 'dry_run'):
-            # Assign this to the class by using self.*
-            # can then be used by populate_* methods
-            self.remote_data = requests.get('https://some_remote_source.example.com')
-
-```
 
 ## Bot order confirmation
 
@@ -695,3 +721,33 @@ The variable 'content', will contain the strategy file in a BASE64 encoded form.
 ```
 
 Please ensure that 'NameOfStrategy' is identical to the strategy name!
+
+## Performance warning
+
+When executing a strategy, one can sometimes be greeted by the following in the logs
+
+> PerformanceWarning: DataFrame is highly fragmented.
+
+This is a warning from [`pandas`](https://github.com/pandas-dev/pandas) and as the warning continues to say:
+use `pd.concat(axis=1)`.
+This can have slight performance implications, which are usually only visible during hyperopt (when optimizing an indicator).
+
+For example:
+
+```python
+for val in self.buy_ema_short.range:
+    dataframe[f'ema_short_{val}'] = ta.EMA(dataframe, timeperiod=val)
+```
+
+should be rewritten to
+
+```python
+frames = [dataframe]
+for val in self.buy_ema_short.range:
+    frames.append({
+        f'ema_short_{val}': ta.EMA(dataframe, timeperiod=val)
+    })
+
+# Append columns to existing dataframe
+merged_frame = pd.concat(frames, axis=1)
+```
