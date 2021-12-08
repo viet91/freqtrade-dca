@@ -155,7 +155,7 @@ class Exchange:
                 self.validate_pairs(config['exchange']['pair_whitelist'])
             self.validate_ordertypes(config.get('order_types', {}))
             self.validate_order_time_in_force(config.get('order_time_in_force', {}))
-            self.required_candle_call_count = self.validate_required_startup_candles(
+            self.validate_required_startup_candles(
                 config.get('startup_candle_count', 0), config.get('timeframe', ''))
 
         # Converts the interval provided in minutes in config to seconds
@@ -269,8 +269,8 @@ class Exchange:
             markets = {k: v for k, v in markets.items() if v['base'] in base_currencies}
         if quote_currencies:
             markets = {k: v for k, v in markets.items() if v['quote'] in quote_currencies}
-        if pairs_only:
-            markets = {k: v for k, v in markets.items() if self.market_is_tradable(v)}
+        # if pairs_only:
+        #     markets = {k: v for k, v in markets.items() if self.market_is_tradable(v)}
         if active_only:
             markets = {k: v for k, v in markets.items() if market_is_active(v)}
         return markets
@@ -299,13 +299,8 @@ class Exchange:
         Check if the market symbol is tradable by Freqtrade.
         By default, checks if it's splittable by `/` and both sides correspond to base / quote
         """
-        symbol_parts = market['symbol'].split('/')
-        return (len(symbol_parts) == 2 and
-                len(symbol_parts[0]) > 0 and
-                len(symbol_parts[1]) > 0 and
-                symbol_parts[0] == market.get('base') and
-                symbol_parts[1] == market.get('quote')
-                )
+        # symbol_parts = market['symbol'].split('/')
+        return (True)
 
     def klines(self, pair_interval: Tuple[str, str], copy: bool = True) -> DataFrame:
         if pair_interval in self._klines:
@@ -471,29 +466,19 @@ class Exchange:
             raise OperationalException(
                 f'Time in force policies are not supported for {self.name} yet.')
 
-    def validate_required_startup_candles(self, startup_candles: int, timeframe: str) -> int:
+    def validate_required_startup_candles(self, startup_candles: int, timeframe: str) -> None:
         """
         Checks if required startup_candles is more than ohlcv_candle_limit().
         Requires a grace-period of 5 candles - so a startup-period up to 494 is allowed by default.
         """
         candle_limit = self.ohlcv_candle_limit(timeframe)
-        # Require one more candle - to account for the still open candle.
-        candle_count = startup_candles + 1
-        # Allow 5 calls to the exchange per pair
-        required_candle_call_count = int(
-            (candle_count / candle_limit) + (0 if candle_count % candle_limit == 0 else 1))
 
-        if required_candle_call_count > 5:
+        if startup_candles + 5 > candle_limit:
             # Only allow 5 calls per pair to somewhat limit the impact
             raise OperationalException(
-                f"This strategy requires {startup_candles} candles to start, which is more than 5x "
-                f"the amount of candles {self.name} provides for {timeframe}.")
+                f"This strategy requires {startup_candles} candles to start. "
++               f"{self.name} only provides {candle_limit - 5} for {timeframe}.")
 
-        if required_candle_call_count > 1:
-            logger.warning(f"Using {required_candle_call_count} calls to get OHLCV. "
-                           f"This can result in slower operations for the bot. Please check "
-                           f"if you really need {startup_candles} candles for your strategy")
-        return required_candle_call_count
 
     def exchange_has(self, endpoint: str) -> bool:
         """
@@ -1218,11 +1203,9 @@ class Exchange:
         :param since_ms: Timestamp in milliseconds to get history from
         :return: List with candle (OHLCV) data
         """
-        pair, timeframe, data = asyncio.get_event_loop().run_until_complete(
+        return asyncio.get_event_loop().run_until_complete(
             self._async_get_historic_ohlcv(pair=pair, timeframe=timeframe,
                                            since_ms=since_ms, is_new_pair=is_new_pair))
-        logger.info(f"Downloaded data for {pair} with length {len(data)}.")
-        return data
 
     def get_historic_ohlcv_as_df(self, pair: str, timeframe: str,
                                  since_ms: int) -> DataFrame:
@@ -1238,9 +1221,8 @@ class Exchange:
                                   drop_incomplete=self._ohlcv_partial_candle)
 
     async def _async_get_historic_ohlcv(self, pair: str, timeframe: str,
-                                        since_ms: int, is_new_pair: bool = False,
-                                        raise_: bool = False
-                                        ) -> Tuple[str, str, List]:
+                                        since_ms: int, is_new_pair: bool
+                                        ) -> List:
         """
         Download historic ohlcv
         :param is_new_pair: used by binance subclass to allow "fast" new pair downloading
@@ -1264,17 +1246,15 @@ class Exchange:
             for res in results:
                 if isinstance(res, Exception):
                     logger.warning("Async code raised an exception: %s", res.__class__.__name__)
-                    if raise_:
-                        raise
                     continue
-                else:
-                    # Deconstruct tuple if it's not an exception
-                    p, _, new_data = res
-                    if p == pair:
-                        data.extend(new_data)
+                # Deconstruct tuple if it's not an exception
+                p, _, new_data = res
+                if p == pair:
+                    data.extend(new_data)
         # Sort data again after extending the result - above calls return in "async order"
         data = sorted(data, key=lambda x: x[0])
-        return pair, timeframe, data
+        logger.info(f"Downloaded data for {pair} with length {len(data)}.")
++       return data
 
     def refresh_latest_ohlcv(self, pair_list: ListPairsWithTimeframes, *,
                              since_ms: Optional[int] = None, cache: bool = True
@@ -1294,22 +1274,10 @@ class Exchange:
         cached_pairs = []
         # Gather coroutines to run
         for pair, timeframe in set(pair_list):
-            if ((pair, timeframe) not in self._klines
+            if (((pair, timeframe) not in self._klines)
                     or self._now_is_time_to_refresh(pair, timeframe)):
-                if not since_ms and self.required_candle_call_count > 1:
-                    # Multiple calls for one pair - to get more history
-                    one_call = timeframe_to_msecs(timeframe) * self.ohlcv_candle_limit(timeframe)
-                    move_to = one_call * self.required_candle_call_count
-                    now = timeframe_to_next_date(timeframe)
-                    since_ms = int((now - timedelta(seconds=move_to // 1000)).timestamp() * 1000)
-
-                if since_ms:
-                    input_coroutines.append(self._async_get_historic_ohlcv(
-                        pair, timeframe, since_ms=since_ms, raise_=True))
-                else:
-                    # One call ... "regular" refresh
-                    input_coroutines.append(self._async_get_candle_history(
-                        pair, timeframe, since_ms=since_ms))
+                input_coroutines.append(self._async_get_candle_history(
+                    pair, timeframe, since_ms=since_ms))
             else:
                 logger.debug(
                     "Using cached candle (OHLCV) data for pair %s, timeframe %s ...",
@@ -1318,9 +1286,10 @@ class Exchange:
                 cached_pairs.append((pair, timeframe))
 
         results = asyncio.get_event_loop().run_until_complete(
-            asyncio.gather(*input_coroutines, return_exceptions=True))
++            asyncio.gather(*input_coroutines, return_exceptions=True))
 
         results_df = {}
+
         # handle caching
         for res in results:
             if isinstance(res, Exception):
@@ -1338,6 +1307,7 @@ class Exchange:
             results_df[(pair, timeframe)] = ohlcv_df
             if cache:
                 self._klines[(pair, timeframe)] = ohlcv_df
+
         # Return cached klines
         for pair, timeframe in cached_pairs:
             results_df[(pair, timeframe)] = self.klines((pair, timeframe), copy=False)
@@ -1564,7 +1534,7 @@ def is_exchange_known_ccxt(exchange_name: str, ccxt_module: CcxtModuleType = Non
 
 
 def is_exchange_officially_supported(exchange_name: str) -> bool:
-    return exchange_name in ['bittrex', 'binance', 'kraken', 'ftx', 'gateio', 'okex']
+    return exchange_name in ['bittrex', 'binance', 'kraken']
 
 
 def ccxt_exchanges(ccxt_module: CcxtModuleType = None) -> List[str]:

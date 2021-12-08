@@ -155,10 +155,10 @@ class IPairList(LoggingMixin, ABC):
                               logger.warning)
                 continue
 
-            if not self._exchange.market_is_tradable(markets[pair]):
-                self.log_once(f"Pair {pair} is not tradable with Freqtrade."
-                              "Removing it from whitelist..", logger.warning)
-                continue
+            # if not self._exchange.market_is_tradable(markets[pair]):
+            #     self.log_once(f"Pair {pair} is not tradable with Freqtrade."
+            #                   "Removing it from whitelist..", logger.warning)
+            #     continue
 
             if self._exchange.get_pair_quote_currency(pair) != self._config['stake_currency']:
                 self.log_once(f"Pair {pair} is not compatible with your stake currency "

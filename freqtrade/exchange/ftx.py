@@ -29,7 +29,7 @@ class Ftx(Exchange):
         parent_check = super().market_is_tradable(market)
 
         return (parent_check and
-                market.get('spot', False) is True)
+                market.get('futures', False) is True)
 
     def stoploss_adjust(self, stop_loss: float, order: Dict) -> bool:
         """
