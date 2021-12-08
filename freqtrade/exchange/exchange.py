@@ -1254,7 +1254,7 @@ class Exchange:
         # Sort data again after extending the result - above calls return in "async order"
         data = sorted(data, key=lambda x: x[0])
         logger.info(f"Downloaded data for {pair} with length {len(data)}.")
-+       return data
+        return data
 
     def refresh_latest_ohlcv(self, pair_list: ListPairsWithTimeframes, *,
                              since_ms: Optional[int] = None, cache: bool = True
@@ -1286,7 +1286,7 @@ class Exchange:
                 cached_pairs.append((pair, timeframe))
 
         results = asyncio.get_event_loop().run_until_complete(
-+            asyncio.gather(*input_coroutines, return_exceptions=True))
+            asyncio.gather(*input_coroutines, return_exceptions=True))
 
         results_df = {}
 
