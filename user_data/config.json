@@ -1,5 +1,5 @@
 {
-    "strategy": "ClucHAnix_3c",
+    "strategy": "ClucHAnix_3c_ftx",
     "max_open_trades": 10,
     "stake_currency": "USD",
     "stake_amount": 200,
