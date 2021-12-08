@@ -59,10 +59,10 @@ dependencies:
         - py-find-1st
         - ccxt==1.53.72
         - TA-lib
-        - freqtrade==2021.7 # comment this line for dev version
+        # - freqtrade==2021.7 # comment this line for dev version
         - technical
         - pandas-ta
         - ta
         - finta
-        # - -e . # use this line for dev version, need to use first: git clone https://github.com/freqtrade/freqtrade.git .
+        - -e . # use this line for dev version, need to use first: git clone https://github.com/freqtrade/freqtrade.git .
    
